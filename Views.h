@@ -147,7 +147,6 @@ namespace Views
 			size_t _size;
 			TIterator _begin;
 			TIterator _end;
-			std::vector<T> _chunk;
 		public:
 			constexpr ChunkIterator(TRange& range, size_t size, TIterator begin):
 				_range(range),
@@ -158,14 +157,9 @@ namespace Views
 				MoveNext();
 			}
 
-			constexpr std::vector<T> operator*() const
+			constexpr auto operator*() const
 			{
-				if(_begin == _end)
-				{
-					throw std::out_of_range("Cannot get empty range");
-				}
-
-				return _chunk;
+				return std::ranges::subrange(_begin, _end);
 			}
 
 			constexpr ChunkIterator& operator++()
@@ -193,12 +187,8 @@ namespace Views
 
 			void MoveNext()
 			{
-				_chunk.clear();
 				_begin = _end;
-				for(int i = 0; i < _size && _end != _range.end(); i++, _end++)
-				{
-					_chunk.push_back(*_end);
-				}				
+				std::ranges::advance(_end, _size, _range.end());
 			}
 		};
 	public:
