@@ -17,9 +17,10 @@ namespace Ranges::Adaptors
 	template<typename TAdaptor>
 	struct RangeAdaptor
 	{
-		constexpr auto operator()(range auto&& range) const
+		template<range TRange>
+		constexpr auto operator()(TRange&& range) const
 		{
-			return static_cast<const TAdaptor&>(*this)(std::forward<decltype(range)>(range));
+			return static_cast<const TAdaptor&>(*this)(std::forward<TRange>(range));
 		}
 
 		template<range TRange>
@@ -135,30 +136,7 @@ namespace Ranges::Adaptors
 		template<range TRange>
 		constexpr auto operator()(TRange&& range) const
 		{
-			if constexpr(view<TRange>)
-			{
-				return Views::AppendView(std::forward<TRange>(range), Value);
-			}
-			else
-			{
-				return Views::AppendView(all(std::forward<TRange>(range)), Value);
-			}
-		}
-	};
-
-	struct AsViewAdaptor : public RangeAdaptor<AsViewAdaptor>
-	{
-		template<range TRange>
-		constexpr auto operator()(TRange&& range) const
-		{
-			if constexpr(view<TRange>)
-			{
-				return range;
-			}
-			else
-			{
-				return all(std::forward<TRange>(range));
-			}
+			return Views::AppendView(std::forward<TRange>(range), Value);
 		}
 	};
 
@@ -189,14 +167,7 @@ namespace Ranges::Adaptors
 		template<range TRange>
 		constexpr auto operator()(TRange&& range) const
 		{
-			if constexpr(view<TRange>)
-			{
-				return Views::ChunkView(range, Size);
-			}
-			else
-			{
-				return Views::ChunkView(all(std::forward<TRange>(range)), Size);
-			}			
+			return Views::ChunkView(std::forward<TRange>(range), Size);
 		}
 	};
 
@@ -212,25 +183,10 @@ namespace Ranges::Adaptors
 		template<range TRange>
 		constexpr auto operator()(TRange&& range) const
 		{
-			constexpr bool isFirstView = view<TRange>;
-			constexpr bool isSecondView = view<TOtherRange>;
-
-			if constexpr(isFirstView && isSecondView)
-			{
-				return Views::ConcatView(range, OtherRange);
-			}
-
-			if constexpr(isFirstView && !isSecondView)
-			{
-				return Views::ConcatView(range, all(std::forward<TOtherRange>(OtherRange)));
-			}
-
-			if constexpr(!isFirstView && isSecondView)
-			{
-				return Views::ConcatView(all(std::forward<TRange>(range)), OtherRange);
-			}
-
-			return Views::ConcatView(all(std::forward<TRange>(range)), all(std::forward<TOtherRange>(OtherRange)));
+			return Views::ConcatView(
+				std::forward<TRange>(range), 
+				std::forward<TOtherRange>(OtherRange)
+			);
 		}
 	};
 
@@ -454,7 +410,7 @@ namespace Ranges::Adaptors
 		}
 	};
 
-	struct LastOrDefaultAdaptor: public RangeAdaptor<LastOrDefaultAdaptor>
+	struct LastOrDefaultAdaptor : public RangeAdaptor<LastOrDefaultAdaptor>
 	{
 		template<range TRange>
 		constexpr auto operator()(TRange&& range) const
@@ -471,7 +427,7 @@ namespace Ranges::Adaptors
 	};
 
 	template<typename TPredicate>
-	struct LastOrDefaultAdaptor2: public RangeAdaptor<LastOrDefaultAdaptor2<TPredicate>>
+	struct LastOrDefaultAdaptor2 : public RangeAdaptor<LastOrDefaultAdaptor2<TPredicate>>
 	{
 		TPredicate Predicate;
 
@@ -555,14 +511,7 @@ namespace Ranges::Adaptors
 		constexpr auto operator()(TRange&& range) const
 		{
 			using T = std::invoke_result_t<TProjection, range_value_t<TRange>>;
-			if constexpr(view<TRange>)
-			{
-				return Views::OrderedView(std::forward<TRange>(range), TComparer<T>(), Projection);
-			}
-			else
-			{
-				return Views::OrderedView(std::views::all(std::forward<TRange>(range)), TComparer<T>(), Projection);
-			}
+			return Views::OrderedView(std::forward<TRange>(range), TComparer<T>(), Projection);
 		}
 	};
 

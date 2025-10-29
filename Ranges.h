@@ -36,7 +36,7 @@ namespace Ranges
 
 	constexpr auto AsView()
 	{
-		return Adaptors::AsViewAdaptor();
+		return std::views::all;
 	}
 
 	constexpr auto Average()
@@ -168,7 +168,7 @@ namespace Ranges
 		return Adaptors::OrderAdaptor<std::less, TProjection>(projection);
 	}
 
-	constexpr auto OrderDescending()
+	constexpr auto OrderByDescending()
 	{
 		return Adaptors::OrderAdaptor<std::greater>();
 	}
@@ -182,6 +182,11 @@ namespace Ranges
 	constexpr auto Range(int start, int count)
 	{
 		return std::views::iota(start, count);
+	}
+
+	constexpr auto Reverse()
+	{
+		return std::views::reverse;
 	}
 
 	template<typename TSelector>

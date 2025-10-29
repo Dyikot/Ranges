@@ -15,20 +15,21 @@ namespace Views
 	using std::ranges::range_difference_t;
 	using std::ranges::range_reference_t;
 	using std::ranges::iterator_t;
+	using std::views::all_t;	
 
 	enum class AppendPosition
 	{
 		InRange, InAppend, InEnd
 	};
 
-	template<view TRange>
-	class AppendView: public view_interface<AppendView<TRange>>
+	template<view TView>
+	class AppendView : public view_interface<AppendView<TView>>
 	{
 	private:
-		using T = range_value_t<TRange>;
-		using TIterator = iterator_t<TRange>;
+		using T = range_value_t<TView>;
+		using TIterator = iterator_t<TView>;
 
-		TRange _range;
+		TView _view;
 		T _value;		
 
 		class AppendIterator
@@ -38,7 +39,7 @@ namespace Views
 			TIterator _it;		
 			AppendPosition _position;
 		public:
-			using reference = range_reference_t<TRange>;
+			using reference = range_reference_t<TView>;
 
 			constexpr AppendIterator(AppendView& parent, TIterator it, AppendPosition position):
 				_parent(parent),
@@ -66,7 +67,7 @@ namespace Views
 				switch(_position)
 				{
 					case AppendPosition::InRange:
-						if(++_it == _parent._range.end())
+						if(++_it == _parent._view.end())
 						{
 							_position = AppendPosition::InAppend;
 						}
@@ -95,76 +96,85 @@ namespace Views
 			{
 				return _it == other._it && _position == other._position;
 			}
-
-			constexpr bool operator!=(const AppendIterator& other) const
-			{
-				return !(*this == other);
-			}
 		};
 	public:
-		constexpr AppendView(TRange range, T value):
-			_range(std::move(range)),
+		constexpr AppendView(TView range, T value):
+			_view(std::move(range)),
 			_value(std::move(value))
 		{}
-		AppendView(const AppendView&) requires std::copyable<TRange> = default;
+		AppendView(const AppendView&) requires std::copyable<TView> = default;
 		AppendView(AppendView&&) = default;
 
 		constexpr auto begin()
 		{
-			if(_range.begin() != _range.end())
+			if(_view.begin() != _view.end())
 			{
-				return AppendIterator(*this, _range.begin(), AppendPosition::InRange);
+				return AppendIterator(*this, _view.begin(), AppendPosition::InRange);
 			}
 			else
 			{
-				return AppendIterator(*this, _range.begin(), AppendPosition::InAppend);
+				return AppendIterator(*this, _view.begin(), AppendPosition::InAppend);
 			}
 		}
 
 		constexpr auto end()
 		{
-			return AppendIterator(*this, _range.end(), AppendPosition::InEnd);
+			return AppendIterator(*this, _view.end(), AppendPosition::InEnd);
 		}
 
-		AppendView& operator=(const AppendView&) requires std::copyable<TRange> = default;
+		AppendView& operator=(const AppendView&) requires std::copyable<TView> = default;
 		AppendView& operator=(AppendView&&) = default;
 	};
 
-	template<view TRange>
-	class ChunkView: public view_interface<ChunkView<TRange>>
+	template<typename TRange>
+	AppendView(TRange&&, range_value_t<TRange>) -> AppendView<all_t<TRange>>;
+
+	template<view TView>
+	class ChunkView : public view_interface<ChunkView<TView>>
 	{
 	private:
-		using T = range_value_t<TRange>;
-		using TIterator = iterator_t<TRange>;
+		using TIterator = iterator_t<TView>;
 
-		TRange _range;
+		TView _view;
 		size_t _size;
 
 		class ChunkIterator
 		{
 		private:
-			TRange& _range;
-			size_t _size;
-			TIterator _begin;
+			size_t _size = 1;
+			TIterator _current;
 			TIterator _end;
 		public:
-			constexpr ChunkIterator(TRange& range, size_t size, TIterator begin):
-				_range(range),
+			using iterator_concept = std::forward_iterator_tag;
+			using iterator_category = std::forward_iterator_tag;
+			using value_type = std::ranges::subrange<TIterator>;
+			using difference_type = std::iter_reference_t<TIterator>;
+			using pointer = void;
+			using reference = value_type&;
+
+			constexpr ChunkIterator(size_t size, TIterator current, TIterator end):
 				_size(size),
-				_begin(begin),
-				_end(begin)
-			{
-				MoveNext();
-			}
+				_current(current),
+				_end(end)
+			{}
 
 			constexpr auto operator*() const
 			{
-				return std::ranges::subrange(_begin, _end);
+				if(_current == _end)
+				{
+					return std::ranges::subrange(_current, _current);
+				}
+
+				TIterator begin = _current;
+				TIterator end = _current;
+				std::ranges::advance(end, _size, _end);
+
+				return std::ranges::subrange(begin, end);
 			}
 
 			constexpr ChunkIterator& operator++()
 			{
-				MoveNext();
+				std::ranges::advance(_current, _size, _end);
 				return *this;
 			}
 
@@ -177,23 +187,12 @@ namespace Views
 
 			constexpr bool operator==(const ChunkIterator& other) const
 			{
-				return _begin == other._begin && _end == other._end;
-			}
-
-			constexpr bool operator!=(const ChunkIterator& other) const
-			{
-				return !(*this == other);
-			}
-
-			void MoveNext()
-			{
-				_begin = _end;
-				std::ranges::advance(_end, _size, _range.end());
+				return _current == other._current;
 			}
 		};
 	public:
-		constexpr ChunkView(TRange range, size_t size):
-			_range(std::move(range)),
+		constexpr ChunkView(TView view, size_t size):
+			_view(std::move(view)),
 			_size(size)
 		{
 			if(_size == 0)
@@ -202,49 +201,58 @@ namespace Views
 			}
 		}
 
-		ChunkView(const ChunkView&) requires std::copyable<TRange> = default;
+		ChunkView(const ChunkView&) requires std::copyable<TView> = default;
 		ChunkView(ChunkView&&) = default;
 
-		constexpr auto begin()
+		constexpr auto begin() const
 		{
-			return ChunkIterator(_range, _size, _range.begin());
+			return ChunkIterator(_size, std::ranges::begin(_view), std::ranges::end(_view));
 		}
 
-		constexpr auto end()
+		constexpr auto end() const
 		{
-			return ChunkIterator(_range, _size, _range.end());
+			return ChunkIterator(_size, std::ranges::end(_view), std::ranges::end(_view));
 		}
 
-		ChunkView& operator=(const ChunkView&) requires std::copyable<TRange> = default;
+		constexpr auto size() const requires std::ranges::sized_range<TView>
+		{
+			auto n = std::ranges::size(_view);
+			return (n + _size - 1) / _size;
+		}
+
+		ChunkView& operator=(const ChunkView&) requires std::copyable<TView> = default;
 		ChunkView& operator=(ChunkView&&) = default;
 	};
 
-	template<view TRange, view TOtherRange>
-		requires std::same_as<range_value_t<TRange>, range_value_t<TOtherRange>>
-	class ConcatView : public view_interface<ConcatView<TRange, TOtherRange>>
+	template<typename TRange>
+	ChunkView(TRange&&, size_t) -> ChunkView<all_t<TRange>>;
+
+	template<view TView, view TOtherView>
+		requires std::same_as<range_value_t<TView>, range_value_t<TOtherView>>
+	class ConcatView : public view_interface<ConcatView<TView, TOtherView>>
 	{
 	private:
-		using T = range_value_t<TRange>;
-
-		TRange _range;
-		TOtherRange _otherRange;
+		TView _view;
+		TOtherView _otherView;
 
 		class ConcatIterator
 		{
 		private:
-			ConcatView& _parent;
+			ConcatView* _parent {};
 			bool _isInSecond;
-			iterator_t<TRange> _firstIterator;
-			iterator_t<TOtherRange> _secondIterator;
+			iterator_t<TView> _firstIterator;
+			iterator_t<TOtherView> _secondIterator;
 		public:
-			using reference = range_reference_t<TRange>;
+			using value_type = range_value_t<TView>;
+			using difference_type = range_difference_t<TView>;
+			using reference = range_reference_t<TView>;
 
 			constexpr ConcatIterator(ConcatView& parent, bool isEnd):
-				_parent(parent),
+				_parent(&parent),
 				_isInSecond(false)
 			{
-				TRange& first = parent._range;
-				TOtherRange& second = parent._otherRange;
+				auto& first = parent._view;
+				auto& second = parent._otherView;
 
 				if(isEnd)
 				{
@@ -284,10 +292,10 @@ namespace Views
 				}
 				else
 				{
-					if(++_firstIterator == _parent._range.end())
+					if(++_firstIterator == _parent->_view.end())
 					{
 						_isInSecond = true;
-						_secondIterator = _parent._otherRange.begin();
+						_secondIterator = _parent->_otherView.begin();
 					}
 				}
 
@@ -308,20 +316,14 @@ namespace Views
 						? _secondIterator == other._secondIterator
 						: _firstIterator == other._firstIterator);
 			}
-
-			constexpr bool operator!=(const ConcatIterator& other) const
-			{
-				return !(*this == other);
-			}
 		};
-
 	public:
-		constexpr ConcatView(TRange range, TOtherRange otherRange):
-			_range(std::move(range)),
-			_otherRange(std::move(otherRange))
+		constexpr ConcatView(TView range, TOtherView otherRange):
+			_view(std::move(range)),
+			_otherView(std::move(otherRange))
 		{}
 
-		ConcatView(const ConcatView&) requires std::copyable<TRange> = default;
+		ConcatView(const ConcatView&) requires std::copyable<TView> = default;
 		ConcatView(ConcatView&&) = default;
 
 		constexpr auto begin()
@@ -334,58 +336,64 @@ namespace Views
 			return ConcatIterator(*this, true);
 		}
 
-		constexpr auto size() requires sized_range<TRange> && sized_range<TOtherRange>
+		constexpr auto size() requires sized_range<TView> && sized_range<TOtherView>
 		{
-			return std::ranges::size(_range) + std::ranges::size(_otherRange);
+			return std::ranges::size(_view) + std::ranges::size(_otherView);
 		}
 
-		ConcatView& operator=(const ConcatView&) requires std::copyable<TRange> = default;
+		ConcatView& operator=(const ConcatView&) requires std::copyable<TView> = default;
 		ConcatView& operator=(ConcatView&&) = default;
 	};
 
-	template<view TRange, typename TComparer, typename TProjection>
-	class OrderedView : public view_interface<OrderedView<TRange, TComparer, TProjection>>
+	template<typename TRange, typename TOtherRange>
+	ConcatView(TRange&&, TOtherRange&&) -> ConcatView<all_t<TRange>, all_t<TOtherRange>>;
+
+	template<view TView, typename TComparer, typename TProjection>
+	class OrderedView : public view_interface<OrderedView<TView, TComparer, TProjection>>
 	{
 	private:
-		using T = range_value_t<TRange>;
+		using T = range_value_t<TView>;
 
+		TView _view;
 		TComparer _comparer;
 		TProjection _projection;
-		TRange _range;
-		bool _sorted = false;
-		std::vector<T> _sortedRange;
+		mutable bool _sorted = false;
+		mutable std::vector<T> _sortedRange;
 	public:
-		constexpr OrderedView(TRange&& range, TComparer comparer, TProjection projection):
-			_range(std::forward<TRange>(range)),
+		constexpr OrderedView(TView view, TComparer comparer, TProjection projection):
+			_view(std::move(view)),
 			_comparer(std::move(comparer)),
 			_projection(std::move(projection))
 		{}
-		OrderedView(const OrderedView&) requires std::copyable<TRange> = default;
+		OrderedView(const OrderedView&) requires std::copyable<TView> = default;
 		OrderedView(OrderedView&&) = default;
 
-		constexpr auto begin()
+		constexpr auto begin() const
 		{
-			TrySort();
-			return _sortedRange.begin();
+			EnsureSorted();
+			return std::ranges::begin(_sortedRange);
 		}
 
-		constexpr auto end()
+		constexpr auto end() const
 		{
-			TrySort();
-			return _sortedRange.end();
+			EnsureSorted();
+			return std::ranges::end(_sortedRange);
 		}
 
-		OrderedView& operator=(const OrderedView&) requires std::copyable<TRange> = default;
+		OrderedView& operator=(const OrderedView&) requires std::copyable<TView> = default;
 		OrderedView& operator=(OrderedView&&) = default;
 	private:
-		constexpr void TrySort()
+		constexpr void EnsureSorted() const
 		{
 			if(!_sorted)
 			{
 				_sorted = true;
-				_sortedRange = std::vector(_range.begin(), _range.end());
-				std::ranges::sort(*_sortedRange, _comparer, _projection);
+				_sortedRange = std::vector(std::ranges::begin(_view), std::ranges::end(_view));
+				std::ranges::sort(_sortedRange, _comparer, _projection);
 			}
 		}
 	};
+
+	template<typename TRange, typename TComparer, typename TProjection>
+	OrderedView(TRange&&, TComparer, TProjection) -> OrderedView<all_t<TRange>, TComparer, TProjection>;
 }
