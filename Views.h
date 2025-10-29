@@ -35,14 +35,20 @@ namespace Views
 		class AppendIterator
 		{
 		private:
-			AppendView& _parent;
+			AppendView* _parent {};
 			TIterator _it;		
-			AppendPosition _position;
+			AppendPosition _position = AppendPosition::InRange;
 		public:
+			using iterator_concept = std::forward_iterator_tag;
+			using iterator_category = std::forward_iterator_tag;
+			using value_type = range_value_t<TView>;
+			using difference_type = range_difference_t<TView>;
 			using reference = range_reference_t<TView>;
 
+			constexpr AppendIterator() requires std::default_initializable<TIterator> = default;
+
 			constexpr AppendIterator(AppendView& parent, TIterator it, AppendPosition position):
-				_parent(parent),
+				_parent(&parent),
 				_it(it),
 				_position(position)
 			{}
@@ -55,7 +61,7 @@ namespace Views
 						return *_it;
 
 					case AppendPosition::InAppend:
-						return _parent._value;
+						return _parent->_value;
 
 					case AppendPosition::InEnd:
 						throw std::out_of_range("Cannot get value at end");
@@ -67,7 +73,7 @@ namespace Views
 				switch(_position)
 				{
 					case AppendPosition::InRange:
-						if(++_it == _parent._view.end())
+						if(++_it == _parent->_view.end())
 						{
 							_position = AppendPosition::InAppend;
 						}
@@ -98,6 +104,10 @@ namespace Views
 			}
 		};
 	public:
+		constexpr AppendView() requires
+			std::default_initializable<TView> &&
+			std::default_initializable<T> = default;
+
 		constexpr AppendView(TView range, T value):
 			_view(std::move(range)),
 			_value(std::move(value))
@@ -136,7 +146,7 @@ namespace Views
 		using TIterator = iterator_t<TView>;
 
 		TView _view;
-		size_t _size;
+		size_t _size = 1;
 
 		class ChunkIterator
 		{
@@ -148,9 +158,9 @@ namespace Views
 			using iterator_concept = std::forward_iterator_tag;
 			using iterator_category = std::forward_iterator_tag;
 			using value_type = std::ranges::subrange<TIterator>;
-			using difference_type = std::iter_reference_t<TIterator>;
-			using pointer = void;
-			using reference = value_type&;
+			using difference_type = std::iter_difference_t<TIterator>;
+
+			constexpr ChunkIterator() requires std::default_initializable<TIterator> = default;
 
 			constexpr ChunkIterator(size_t size, TIterator current, TIterator end):
 				_size(size),
@@ -158,7 +168,7 @@ namespace Views
 				_end(end)
 			{}
 
-			constexpr auto operator*() const
+			constexpr value_type operator*() const
 			{
 				if(_current == _end)
 				{
@@ -191,6 +201,8 @@ namespace Views
 			}
 		};
 	public:
+		constexpr ChunkView() requires std::default_initializable<TView> = default;
+
 		constexpr ChunkView(TView view, size_t size):
 			_view(std::move(view)),
 			_size(size)
@@ -239,13 +251,19 @@ namespace Views
 		{
 		private:
 			ConcatView* _parent {};
-			bool _isInSecond;
+			bool _isInSecond = false;
 			iterator_t<TView> _firstIterator;
 			iterator_t<TOtherView> _secondIterator;
 		public:
+			using iterator_concept = std::forward_iterator_tag;
+			using iterator_category = std::forward_iterator_tag;
 			using value_type = range_value_t<TView>;
 			using difference_type = range_difference_t<TView>;
 			using reference = range_reference_t<TView>;
+
+			constexpr ConcatIterator() requires
+				std::default_initializable<iterator_t<TView>> &&
+				std::default_initializable<iterator_t<TOtherView>> = default;
 
 			constexpr ConcatIterator(ConcatView& parent, bool isEnd):
 				_parent(&parent),
@@ -318,6 +336,10 @@ namespace Views
 			}
 		};
 	public:
+		constexpr ConcatView() requires 
+			std::default_initializable<TView> && 
+			std::default_initializable<TOtherView> = default;
+
 		constexpr ConcatView(TView range, TOtherView otherRange):
 			_view(std::move(range)),
 			_otherView(std::move(otherRange))

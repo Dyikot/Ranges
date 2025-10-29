@@ -362,7 +362,7 @@ namespace Ranges::Adaptors
 				throw std::runtime_error("Range is empty");
 			}
 
-			return *std::ranges::prev(range.end());
+			return *std::ranges::prev(std::ranges::end(range));
 		}
 	};
 
