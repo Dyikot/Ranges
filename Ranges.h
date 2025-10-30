@@ -5,33 +5,33 @@
 namespace Ranges
 {
 	template<typename TFunc>
-	constexpr auto Aggregate(TFunc func)
+	constexpr auto Aggregate(TFunc&& func)
 	{
-		return Adaptors::AggregateAdaptor<TFunc>(std::move(func));
+		return Adaptors::AggregateAdaptor<TFunc>(std::forward<TFunc>(func));
 	}
 
 	template<typename TFunc, typename TAccumulate>
-	constexpr auto Aggregate(TFunc func, const TAccumulate& seed)
+	constexpr auto Aggregate(TFunc&& func, const TAccumulate& seed)
 	{
-		return Adaptors::AgregateAdaptor2<TFunc, TAccumulate>(std::move(func), seed);
+		return Adaptors::AgregateAdaptor2<TFunc, TAccumulate>(std::forward<TFunc>(func), seed);
 	}	
 
 	template<typename TPredicate>
-	constexpr auto All(TPredicate predicate)
+	constexpr auto All(TPredicate&& predicate)
 	{
-		return Adaptors::AllAdaptor<TPredicate>(std::move(predicate));
+		return Adaptors::AllAdaptor<TPredicate>(std::forward<TPredicate>(predicate));
 	}	
 
 	template<typename TPredicate>
-	constexpr auto Any(TPredicate predicate)
+	constexpr auto Any(TPredicate&& predicate)
 	{
-		return Adaptors::AnyAdaptor<TPredicate>(std::move(predicate));
+		return Adaptors::AnyAdaptor<TPredicate>(std::forward<TPredicate>(predicate));
 	}	
 
 	template<typename TValue>
-	constexpr auto Append(TValue value)
+	constexpr auto Append(const TValue& value)
 	{
-		return Adaptors::AppendAdaptor<TValue>(std::move(value));
+		return Adaptors::AppendAdaptor<TValue>(value);
 	}
 
 	constexpr auto AsView()
@@ -97,9 +97,9 @@ namespace Ranges
 	}	
 
 	template<typename TPredicate>
-	constexpr auto First(TPredicate predicate)
+	constexpr auto First(TPredicate&& predicate)
 	{
-		return Adaptors::FirstAdaptor2<TPredicate>(std::move(predicate));
+		return Adaptors::FirstAdaptor2<TPredicate>(std::forward<TPredicate>(predicate));
 	}
 
 	constexpr auto FisrtOrDefault()
@@ -108,14 +108,19 @@ namespace Ranges
 	}
 
 	template<typename TPredicate>
-	constexpr auto FisrtOrDefault(TPredicate predicate)
+	constexpr auto FisrtOrDefault(TPredicate&& predicate)
 	{
-		return Adaptors::FirstOrDefaultAdaptor2<TPredicate>(std::move(predicate));
+		return Adaptors::FirstOrDefaultAdaptor2<TPredicate>(std::forward<TPredicate>(predicate));
 	}
 
 	constexpr auto Join()
 	{
 		return std::views::join;
+	}
+
+	constexpr auto Keys()
+	{
+		return std::views::keys;
 	}
 
 	constexpr auto Last()
@@ -148,7 +153,7 @@ namespace Ranges
 	template<typename TProjection>
 	constexpr auto MaxBy(TProjection projection)
 	{
-		return Adaptors::MaxAdaptor<TProjection>(projection);
+		return Adaptors::MaxAdaptor<TProjection>(std::move(projection));
 	}	
 
 	constexpr auto Min()
@@ -159,7 +164,7 @@ namespace Ranges
 	template<typename TProjection>
 	constexpr auto MinBy(TProjection projection)
 	{
-		return Adaptors::MinAdaptor<TProjection>(projection);
+		return Adaptors::MinAdaptor<TProjection>(std::move(projection));
 	}	
 
 	constexpr auto Order()
@@ -170,10 +175,10 @@ namespace Ranges
 	template<typename TProjection>
 	constexpr auto OrderBy(TProjection projection)
 	{
-		return Adaptors::OrderAdaptor<std::less, TProjection>(projection);
+		return Adaptors::OrderAdaptor<std::less, TProjection>(std::move(projection));
 	}
 
-	constexpr auto OrderByDescending()
+	constexpr auto OrderDescending()
 	{
 		return Adaptors::OrderAdaptor<std::greater>();
 	}
@@ -181,7 +186,7 @@ namespace Ranges
 	template<typename TProjection>
 	constexpr auto OrderByDescending(TProjection projection)
 	{
-		return Adaptors::OrderAdaptor<std::greater, TProjection>(projection);
+		return Adaptors::OrderAdaptor<std::greater, TProjection>(std::move(projection));
 	}
 
 	constexpr auto Range(int start, int count)
@@ -200,21 +205,73 @@ namespace Ranges
 		return std::views::transform(std::forward<TSelector>(selector));
 	}
 
+	constexpr auto Skip(size_t lenght)
+	{
+		return std::views::drop(lenght);
+	}
+
+	template<typename TPredicate>
+	constexpr auto SkipWhile(TPredicate&& predicate)
+	{
+		return std::views::drop_while(std::forward<TPredicate>(predicate));
+	}
+
 	constexpr auto Slice(size_t start, size_t count)
 	{
 		return std::views::drop(start) | std::views::take(count);
 	}
 
-	template<size_t Size>
-	constexpr auto ToArray()
+	template <typename TDelimeter>
+	constexpr auto Split(TDelimeter&& deliemter)
 	{
-		return Adaptors::ToArrayAdaptor<Size>();
-	}	
+		return std::views::split(std::forward<TDelimeter>(deliemter));
+	}
 
-	template<template<typename> typename TContainer>
+	constexpr auto Take(size_t lenght)
+	{
+		return std::views::take(lenght);
+	}
+
+	template<typename TPredicate>
+	constexpr auto TakeWhile(TPredicate&& predicate)
+	{
+		return std::views::take_while(std::forward<TPredicate>(predicate));
+	}
+
+	template<template<typename...> typename TContainer>
 	constexpr auto To()
 	{
 		return Adaptors::ToAdaptor<TContainer>();
+	}
+
+	template<typename TKeySelector, typename TElementSelector>
+	constexpr auto ToUnorderedMap(TKeySelector&& keySelector, TElementSelector&& elementSelector)
+	{
+		return Adaptors::ToUnorderedMapAdaptor<TKeySelector, TElementSelector>(
+			std::forward<TKeySelector>(keySelector),
+			std::forward<TElementSelector>(elementSelector)
+		);
+	}
+
+	template<typename TSelector>
+	constexpr auto ToUnorderedMap(TSelector&& selector)
+	{
+		return Adaptors::ToUnorderedMapAdaptor2<TSelector>(std::forward<TSelector>(selector));
+	}
+
+	constexpr auto ToUnorderedMap()
+	{
+		return To<std::unordered_map>;
+	}
+
+	constexpr auto ToVector()
+	{
+		return To<std::vector>();
+	}
+
+	constexpr auto Values()
+	{
+		return std::views::values;
 	}
 
 	template<typename TPredicate>

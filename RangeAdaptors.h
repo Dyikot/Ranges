@@ -130,8 +130,8 @@ namespace Ranges::Adaptors
 	{
 		TValue Value;
 
-		constexpr explicit AppendAdaptor(TValue value):
-			Value(std::move(value))
+		constexpr explicit AppendAdaptor(const TValue& value):
+			Value(value)
 		{}
 
 		template<range TRange>
@@ -540,33 +540,61 @@ namespace Ranges::Adaptors
 		template<range TRange>
 		constexpr auto operator()(TRange&& range) const
 		{
-			using T = std::invoke_result_t<TProjection, range_value_t<TRange>>;
+			using T = std::decay_t<std::invoke_result_t<TProjection, range_value_t<TRange>>>;
 			return Views::OrderedView(std::forward<TRange>(range), TComparer<T>(), Projection);
 		}
 	};
 
-	template<size_t Size>
-	struct ToArrayAdaptor : public RangeAdaptor<ToArrayAdaptor<Size>>
+	template<typename TKeySelector, typename TElementSelector>
+	struct ToUnorderedMapAdaptor: public RangeAdaptor<ToUnorderedMapAdaptor<TKeySelector, TElementSelector>>
 	{
+		TKeySelector KeySelector;
+		TElementSelector ElementSelector;
+
+		constexpr ToUnorderedMapAdaptor(TKeySelector keySelector, TElementSelector elementSelector):
+			KeySelector(std::move(keySelector)),
+			ElementSelector(std::move(elementSelector))
+		{}
+
 		template<range TRange>
 		constexpr auto operator()(TRange&& range) const
 		{
 			using T = range_value_t<TRange>;
+			using TKey = std::decay_t<std::invoke_result_t<TKeySelector, T>>;
+			using TElement = std::decay_t<std::invoke_result_t<TElementSelector, T>>;
 
-			const auto minSize = std::min(static_cast<size_t>(std::ranges::distance(range)), Size);
-			auto result = std::array<T, Size>();
-			auto it = std::ranges::begin(range);
+			std::unordered_map<TKey, TElement> map;
 
-			for(size_t i = 0; i < minSize; ++i, ++it)
-			{
-				result[i] = *it;
+			for(const T& item : range)
+			{				
+				map.emplace(
+					std::invoke(KeySelector, item),
+					std::invoke(ElementSelector, item)
+				);
 			}
 
-			return result;
+			return map;
 		}
 	};
 
-	template<template<typename> typename TContainer>
+	template<typename TSelector>
+	struct ToUnorderedMapAdaptor2: public RangeAdaptor<ToUnorderedMapAdaptor2<TSelector>>
+	{
+		TSelector Selector;
+
+		constexpr explicit ToUnorderedMapAdaptor2(TSelector selector):
+			Selector(std::move(selector))
+		{}
+
+		template<range TRange>
+		constexpr auto operator()(TRange&& range) const
+		{
+			auto seleted = range | std::views::transform(Selector);
+			return std::unordered_map(std::ranges::begin(seleted), std::ranges::end(seleted));
+		}
+	};
+
+	template<template<typename...> typename TContainer>
 	struct ToAdaptor : public RangeAdaptor<ToAdaptor<TContainer>>
 	{
 		template<range TRange>
