@@ -7,12 +7,13 @@ namespace Ranges::Adaptors
 	using std::ranges::view;
 	using std::ranges::view_interface;
 	using std::ranges::range;
+	using std::ranges::bidirectional_range;
 	using std::ranges::sized_range;
 	using std::ranges::range_value_t;
 	using std::ranges::range_difference_t;
 	using std::ranges::range_reference_t;
 	using std::ranges::iterator_t;
-	using std::views::all;
+	using std::views::all_t;
 
 	template<typename TAdaptor>
 	struct RangeAdaptor
@@ -185,8 +186,7 @@ namespace Ranges::Adaptors
 		{
 			return Views::ConcatView(
 				std::forward<TRange>(range), 
-				std::forward<TOtherRange>(OtherRange)
-			);
+				std::forward<TOtherRange>(OtherRange));
 		}
 	};
 
@@ -247,7 +247,7 @@ namespace Ranges::Adaptors
 		}
 	};
 
-	struct ElementAtOrDefaultAdaptor: public RangeAdaptor<ElementAtOrDefaultAdaptor>
+	struct ElementAtOrDefaultAdaptor : public RangeAdaptor<ElementAtOrDefaultAdaptor>
 	{
 		size_t Position;
 
@@ -260,10 +260,10 @@ namespace Ranges::Adaptors
 		{
 			using T = range_value_t<TRange>;
 
-			auto it = range.begin();
-			std::ranges::advance(it, Position, range.end());
+			auto it = std::ranges::begin(range);
+			std::ranges::advance(it, Position, std::ranges::end(range));
 
-			if(it == range.end())
+			if(it == std::ranges::end(range))
 			{
 				return std::optional<T>();
 			}
@@ -277,12 +277,12 @@ namespace Ranges::Adaptors
 		template<range TRange>
 		constexpr auto operator()(TRange&& range) const
 		{
-			if(range.begin() == range.end())
+			if(std::ranges::begin(range) == std::ranges::end(range))
 			{
 				throw std::runtime_error("Range is empty");
 			}
 			
-			return *range.begin();
+			return *std::ranges::begin(range);
 		}
 	};
 
@@ -317,12 +317,12 @@ namespace Ranges::Adaptors
 		{
 			using T = range_value_t<TRange>;
 
-			if(range.begin() == range.end())
+			if(std::ranges::begin(range) == std::ranges::end(range))
 			{
 				return std::optional<T>();
 			}
 
-			return std::optional<T>(*range.begin());
+			return std::optional<T>(*std::ranges::begin(range));
 		}
 	};
 
@@ -362,12 +362,26 @@ namespace Ranges::Adaptors
 				throw std::runtime_error("Range is empty");
 			}
 
-			return *std::ranges::prev(std::ranges::end(range));
+			if constexpr(bidirectional_range<TRange>)
+			{
+				return *std::ranges::prev(std::ranges::end(range));
+			}
+			else
+			{
+				auto it = std::ranges::begin(range);
+				auto last = it;
+				for(; it != std::ranges::end(range); ++it)
+				{
+					last = it;
+				}
+
+				return *last;
+			}
 		}
 	};
 
 	template<typename TPredicate>
-	struct LastAdaptor2: public RangeAdaptor<LastAdaptor2<TPredicate>>
+	struct LastAdaptor2 : public RangeAdaptor<LastAdaptor2<TPredicate>>
 	{
 		TPredicate Predicate;
 
@@ -378,7 +392,7 @@ namespace Ranges::Adaptors
 		template<range TRange>
 		constexpr auto operator()(TRange&& range) const
 		{
-			if constexpr(std::ranges::bidirectional_range<TRange>)
+			if constexpr(bidirectional_range<TRange>)
 			{
 				for(auto it = std::ranges::rbegin(range); it != std::ranges::rend(range); it++)
 				{
@@ -417,12 +431,26 @@ namespace Ranges::Adaptors
 		{
 			using T = range_value_t<TRange>;
 
-			if(range.begin() == range.end())
+			if(std::ranges::begin(range) == std::ranges::end(range))
 			{
 				return std::optional<T>();
 			}
 
-			return std::optional<T>(*std::ranges::prev(range.end()));
+			if constexpr(bidirectional_range<TRange>)
+			{
+				return std::optional<T>(*std::ranges::prev(std::ranges::end(range)));
+			}
+			else
+			{
+				auto it = std::ranges::begin(range);
+				auto last = it;
+				for(; it != std::ranges::end(range); ++it)
+				{
+					last = it;
+				}
+
+				return std::optional<T>(*last);
+			}			
 		}
 	};
 
@@ -452,17 +480,19 @@ namespace Ranges::Adaptors
 
 				return std::optional<T>();
 			}
-			
-			std::optional<T> found;
-			for(const auto& item : range)
+			else
 			{
-				if(Predicate(item))
+				std::optional<T> found;
+				for(const auto& item : range)
 				{
-					found = item;
+					if(Predicate(item))
+					{
+						found = item;
+					}
 				}
-			}
 
-			return found;
+				return found;
+			}			
 		}
 	};
 
@@ -525,9 +555,9 @@ namespace Ranges::Adaptors
 
 			const auto minSize = std::min(static_cast<size_t>(std::ranges::distance(range)), Size);
 			auto result = std::array<T, Size>();
-			auto it = range.begin();
+			auto it = std::ranges::begin(range);
 
-			for(size_t i = 0; i < minSize; i++, it++)
+			for(size_t i = 0; i < minSize; ++i, ++it)
 			{
 				result[i] = *it;
 			}
@@ -542,7 +572,7 @@ namespace Ranges::Adaptors
 		template<range TRange>
 		constexpr auto operator()(TRange&& range) const
 		{
-			return TContainer(range.begin(), range.end());
+			return TContainer(std::ranges::begin(range), std::ranges::end(range));
 		}
 	};
 }

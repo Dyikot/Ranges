@@ -26,11 +26,11 @@ namespace Views
 	class AppendView : public view_interface<AppendView<TView>>
 	{
 	private:
-		using T = range_value_t<TView>;
+		using TValue = range_value_t<TView>;
 		using TIterator = iterator_t<TView>;
 
 		TView _view;
-		T _value;		
+		TValue _value;		
 
 		class AppendIterator
 		{
@@ -39,8 +39,8 @@ namespace Views
 			TIterator _it;		
 			AppendPosition _position = AppendPosition::InRange;
 		public:
-			using iterator_concept = std::forward_iterator_tag;
-			using iterator_category = std::forward_iterator_tag;
+			using iterator_concept = std::bidirectional_iterator_tag;
+			using iterator_category = std::bidirectional_iterator_tag;
 			using value_type = range_value_t<TView>;
 			using difference_type = range_difference_t<TView>;
 			using reference = range_reference_t<TView>;
@@ -73,7 +73,7 @@ namespace Views
 				switch(_position)
 				{
 					case AppendPosition::InRange:
-						if(++_it == _parent->_view.end())
+						if(++_it == std::ranges::end(_parent->_view))
 						{
 							_position = AppendPosition::InAppend;
 						}
@@ -98,6 +98,34 @@ namespace Views
 				return tmp;
 			}
 
+			constexpr AppendIterator& operator--() requires std::bidirectional_iterator<TIterator>
+			{
+				switch(_position)
+				{
+					case AppendPosition::InRange:
+						--_it;
+						break;
+
+					case AppendPosition::InAppend:
+						--_it;
+						_position = AppendPosition::InRange;
+						break;
+
+					case AppendPosition::InEnd:
+						_position = AppendPosition::InAppend;
+						break;
+				}
+
+				return *this;
+			}
+
+			constexpr AppendIterator operator--(int) requires std::bidirectional_iterator<TIterator>
+			{
+				AppendIterator tmp = *this;
+				--(*this);
+				return tmp;
+			}
+
 			constexpr bool operator==(const AppendIterator& other) const
 			{
 				return _it == other._it && _position == other._position;
@@ -106,9 +134,9 @@ namespace Views
 	public:
 		constexpr AppendView() requires
 			std::default_initializable<TView> &&
-			std::default_initializable<T> = default;
+			std::default_initializable<TValue> = default;
 
-		constexpr AppendView(TView range, T value):
+		constexpr AppendView(TView range, TValue value):
 			_view(std::move(range)),
 			_value(std::move(value))
 		{}
@@ -144,47 +172,42 @@ namespace Views
 	{
 	private:
 		using TIterator = iterator_t<TView>;
+		using TSize = std::iter_difference_t<TIterator>;
 
 		TView _view;
-		size_t _size = 1;
+		TSize _size = 1;
 
 		class ChunkIterator
 		{
 		private:
-			size_t _size = 1;
-			TIterator _current;
-			TIterator _end;
+			ChunkView* _parent {};
+			TIterator _from;
+			TIterator _to;
 		public:
-			using iterator_concept = std::forward_iterator_tag;
-			using iterator_category = std::forward_iterator_tag;
+			using iterator_concept = std::bidirectional_iterator_tag;
+			using iterator_category = std::bidirectional_iterator_tag;
 			using value_type = std::ranges::subrange<TIterator>;
 			using difference_type = std::iter_difference_t<TIterator>;
 
 			constexpr ChunkIterator() requires std::default_initializable<TIterator> = default;
 
-			constexpr ChunkIterator(size_t size, TIterator current, TIterator end):
-				_size(size),
-				_current(current),
-				_end(end)
-			{}
+			constexpr ChunkIterator(ChunkView& parent, TIterator from):
+				_parent(&parent),
+				_to(from)
+			{
+				_from = _to;
+				std::ranges::advance(_to, _parent->_size, std::ranges::end(_parent->_view));
+			}
 
 			constexpr value_type operator*() const
 			{
-				if(_current == _end)
-				{
-					return std::ranges::subrange(_current, _current);
-				}
-
-				TIterator begin = _current;
-				TIterator end = _current;
-				std::ranges::advance(end, _size, _end);
-
-				return std::ranges::subrange(begin, end);
+				return std::ranges::subrange(_from, _to);
 			}
 
 			constexpr ChunkIterator& operator++()
 			{
-				std::ranges::advance(_current, _size, _end);
+				_from = _to;
+				std::ranges::advance(_to, _parent->_size, std::ranges::end(_parent->_view));
 				return *this;
 			}
 
@@ -195,15 +218,29 @@ namespace Views
 				return tmp;
 			}
 
+			constexpr ChunkIterator& operator--() requires std::bidirectional_iterator<TIterator>
+			{
+				_to = _from;
+				std::ranges::advance(_from, -_parent->_size, std::ranges::begin(_parent->_view));
+				return *this;
+			}
+
+			constexpr ChunkIterator operator--(int) requires std::bidirectional_iterator<TIterator>
+			{
+				ChunkIterator tmp = *this;
+				--(*this);
+				return tmp;
+			}
+
 			constexpr bool operator==(const ChunkIterator& other) const
 			{
-				return _current == other._current;
+				return _from == other._from;
 			}
 		};
 	public:
 		constexpr ChunkView() requires std::default_initializable<TView> = default;
 
-		constexpr ChunkView(TView view, size_t size):
+		constexpr ChunkView(TView view, TSize size):
 			_view(std::move(view)),
 			_size(size)
 		{
@@ -216,14 +253,14 @@ namespace Views
 		ChunkView(const ChunkView&) requires std::copyable<TView> = default;
 		ChunkView(ChunkView&&) = default;
 
-		constexpr auto begin() const
+		constexpr auto begin()
 		{
-			return ChunkIterator(_size, std::ranges::begin(_view), std::ranges::end(_view));
+			return ChunkIterator(*this, std::ranges::begin(_view));
 		}
 
-		constexpr auto end() const
+		constexpr auto end()
 		{
-			return ChunkIterator(_size, std::ranges::end(_view), std::ranges::end(_view));
+			return ChunkIterator(*this, std::ranges::end(_view));
 		}
 
 		constexpr auto size() const requires std::ranges::sized_range<TView>
@@ -252,11 +289,11 @@ namespace Views
 		private:
 			ConcatView* _parent {};
 			bool _isInSecond = false;
-			iterator_t<TView> _firstIterator;
-			iterator_t<TOtherView> _secondIterator;
+			iterator_t<TView> _firstIt;
+			iterator_t<TOtherView> _secondIt;
 		public:
-			using iterator_concept = std::forward_iterator_tag;
-			using iterator_category = std::forward_iterator_tag;
+			using iterator_concept = std::bidirectional_iterator_tag;
+			using iterator_category = std::bidirectional_iterator_tag;
 			using value_type = range_value_t<TView>;
 			using difference_type = range_difference_t<TView>;
 			using reference = range_reference_t<TView>;
@@ -274,16 +311,16 @@ namespace Views
 
 				if(isEnd)
 				{
-					_firstIterator = first.end();
-					_secondIterator = second.end();
+					_firstIt = std::ranges::end(first);
+					_secondIt = std::ranges::end(second);
 					_isInSecond = true;
 				}
 				else
 				{
-					_firstIterator = first.begin();
-					_secondIterator = second.begin();
+					_firstIt = std::ranges::begin(first);
+					_secondIt = std::ranges::begin(second);
 
-					if(_firstIterator == first.end())
+					if(_firstIt == std::ranges::end(first))
 					{
 						_isInSecond = true;
 					}
@@ -294,11 +331,11 @@ namespace Views
 			{
 				if(_isInSecond)
 				{
-					return *_secondIterator;
+					return *_secondIt;
 				}
 				else
 				{
-					return *_firstIterator;
+					return *_firstIt;
 				}
 			}
 
@@ -306,14 +343,14 @@ namespace Views
 			{
 				if(_isInSecond)
 				{
-					++_secondIterator;
+					++_secondIt;
 				}
 				else
 				{
-					if(++_firstIterator == _parent->_view.end())
+					if(++_firstIt == std::ranges::end(_parent->_view))
 					{
 						_isInSecond = true;
-						_secondIterator = _parent->_otherView.begin();
+						_secondIt = std::ranges::begin(_parent->_otherView);
 					}
 				}
 
@@ -327,12 +364,43 @@ namespace Views
 				return tmp;
 			}
 
+			constexpr ConcatIterator& operator--() 
+				requires std::bidirectional_iterator<iterator_t<TView>> &&
+						 std::bidirectional_iterator<iterator_t<TOtherView>>
+			{
+				if(_isInSecond)
+				{
+					if(_secondIt == std::ranges::begin(_parent->_otherView))
+					{
+						_isInSecond = false;
+						_firstIt = --std::ranges::end(_parent->_view);
+					}
+					else
+					{
+						--_secondIt;
+					}
+				}
+				else
+				{
+					--_firstIt;
+				}
+
+				return *this;
+			}
+
+			constexpr ConcatIterator operator--(int)
+				requires std::bidirectional_iterator<iterator_t<TView>>&&
+						 std::bidirectional_iterator<iterator_t<TOtherView>>
+			{
+				ConcatIterator tmp = *this;
+				--(*this);
+				return tmp;
+			}
+
 			constexpr bool operator==(const ConcatIterator& other) const
 			{
 				return _isInSecond == other._isInSecond &&
-					(_isInSecond
-						? _secondIterator == other._secondIterator
-						: _firstIterator == other._firstIterator);
+					  (_isInSecond ? _secondIt == other._secondIt : _firstIt == other._firstIt);
 			}
 		};
 	public:

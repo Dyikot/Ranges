@@ -113,6 +113,11 @@ namespace Ranges
 		return Adaptors::FirstOrDefaultAdaptor2<TPredicate>(std::move(predicate));
 	}
 
+	constexpr auto Join()
+	{
+		return std::views::join;
+	}
+
 	constexpr auto Last()
 	{
 		return Adaptors::LastAdaptor();
