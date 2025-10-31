@@ -20,7 +20,7 @@ std::vector<int> range = { 2, 1, 4, 3, 5 };
 
 auto ascending = range | Ranges::Order();
 // Output: 1 2 3 4 5
-auto descending = range | Ranges::OrderByDescending();
+auto descending = range | Ranges::OrderDescending();
 // Output: 5 4 3 2 1
 ```
 In the following example, we will sort the Person structure by fields.
